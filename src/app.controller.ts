@@ -23,10 +23,14 @@ export class AppController {
     }
 
     try {
-      const predicted = await this.tensorflowService.kospiPredict([
+      const kospiPredicted = await this.tensorflowService.kospiPredict([
         [-0.003, 0.0009, -0.0016],
       ]);
-      console.log(predicted);
+      console.log(kospiPredicted);
+      const kosdaqPredicted = await this.tensorflowService.kosdaqPredict([
+        [-0.003, 0.0009, -0.0016],
+      ]);
+      console.log(kosdaqPredicted);
     } catch (error) {
       console.error('예측 중 오류 발생:', error.message);
     }

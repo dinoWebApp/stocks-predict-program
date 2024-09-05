@@ -26,6 +26,7 @@ export class TensorflowService {
 
     // 예측 결과를 배열로 변환하여 반환
     const predictionArray = await prediction.array();
+    console.log('코스피 예상 확률');
 
     return predictionArray as number[][];
   }
@@ -42,6 +43,7 @@ export class TensorflowService {
 
     // 예측 결과를 배열로 변환하여 반환
     const predictionArray = await prediction.array();
+    console.log('코스닥 예상 확률');
 
     return predictionArray as number[][];
   }
