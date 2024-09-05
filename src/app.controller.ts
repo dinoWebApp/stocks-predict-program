@@ -15,7 +15,7 @@ export class AppController {
   @Render('index')
   async index() {
     const currentDateKorea = DateTime.now().setZone('Asia/Seoul');
-    this.getStockData('2024-09-03');
+    this.getStockData('2024-09-04');
     // 모델 로드 여부 확인
     if (!this.tensorflowService) {
       console.error('TensorflowService가 초기화되지 않았습니다.');
@@ -24,7 +24,7 @@ export class AppController {
 
     try {
       const predicted = await this.tensorflowService.predict([
-        [0.0034, 0.0014, 0.0042],
+        [-0.003, 0.0009, -0.0016],
       ]);
       console.log(predicted);
     } catch (error) {
