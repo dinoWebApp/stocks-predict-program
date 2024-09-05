@@ -21,7 +21,10 @@ async function bootstrap() {
   app.setViewEngine('hbs');
   app.useStaticAssets(join(__dirname, '..', 'public'));
 
-  await tensorflowService.loadModel('./ai-model/kospi-predict/model.json');
+  await tensorflowService.loadModel(
+    './ai-model/kospi-predict/model.json',
+    './ai-model/kosdaq-predict/model.json',
+  );
   await app.listen(3000);
 }
 bootstrap();
