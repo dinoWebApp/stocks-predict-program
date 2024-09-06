@@ -14,25 +14,43 @@ export class AppController {
   @Get()
   @Render('index')
   async index() {
-    const currentDateKorea = DateTime.now().setZone('Asia/Seoul');
-    await this.getStockData('2024-09-04');
-    // 모델 로드 여부 확인
-    if (!this.tensorflowService) {
-      console.error('TensorflowService가 초기화되지 않았습니다.');
-      return;
-    }
-
-    try {
-      const kospiPredicted = await this.tensorflowService.kospiPredict([
-        [-0.003, 0.0009, -0.0016],
-      ]);
-      console.log(kospiPredicted);
-      const kosdaqPredicted = await this.tensorflowService.kosdaqPredict([
-        [-0.003, 0.0009, -0.0016],
-      ]);
-      console.log(kosdaqPredicted);
-    } catch (error) {
-      console.error('예측 중 오류 발생:', error.message);
+    //Todo: 밑에처럼 매번 5개씩 가져오는 것이 아닌 하나씩 db 에 저장해서 불러오는 로직으로 수정 필요
+    let predictResults = [];
+    let minusDays = 1;
+    while (predictResults.length === 5) {
+      const koreanDate = DateTime.now()
+        .setZone('Asia/Seoul')
+        .minus({ days: minusDays })
+        .toFormat('yyyy-MM-dd');
+      const americanDate = DateTime.now()
+        .setZone('Asia/Seoul')
+        .minus({ days: minusDays + 1 })
+        .toFormat('yyyy-MM-dd');
+      const koreanRateOfChangeArr = await this.getKoreanStockData(koreanDate);
+      const americanRateOfChangeArr = await this.getStockData(americanDate);
+      if (
+        koreanRateOfChangeArr.length !== 0 &&
+        americanRateOfChangeArr.length !== 0
+      ) {
+        try {
+          const kospiPredicted = await this.tensorflowService.kospiPredict([
+            americanRateOfChangeArr,
+          ]);
+          const kosdaqPredicted = await this.tensorflowService.kosdaqPredict([
+            americanRateOfChangeArr,
+          ]);
+          predictResults.push({
+            date: koreanDate,
+            kospiPredicted,
+            kosdaqPredicted,
+            kospiResult: koreanRateOfChangeArr[0],
+            kosdaqResult: koreanRateOfChangeArr[1],
+          });
+        } catch (error) {
+          console.error('예측 중 오류 발생:', error.message);
+        }
+      }
+      minusDays++;
     }
   }
 
@@ -92,6 +110,8 @@ export class AppController {
       });
 
       const marketData = await Promise.all(marketDataPromises);
+      let rateOfChangeArr = [];
+      let rateOfChangeVal: number;
 
       marketData.forEach((data, index) => {
         const previousClose = data.previousData?.close; // 전날 종가
@@ -105,14 +125,18 @@ export class AppController {
           console.log(`전날 종가: ${previousClose}`);
           console.log(`당일 종가: ${currentClose}`);
           console.log(`변동률: ${changePercent.toFixed(2)}%\n`);
+          rateOfChangeVal = Number(changePercent.toFixed(2));
+          rateOfChangeArr.push(rateOfChangeVal / 100);
         } else {
           console.log(
             `${indices[index]} (${symbols[index]})에 대한 충분한 데이터가 없습니다.\n`,
           );
         }
       });
+      return rateOfChangeArr;
     } catch (error) {
       console.error('데이터를 가져오는 중 오류 발생:', error);
+      return [];
     }
   }
 
@@ -172,6 +196,8 @@ export class AppController {
       });
 
       const marketData = await Promise.all(marketDataPromises);
+      let rateOfChangeArr = [];
+      let rateOfChangeVal: number;
 
       marketData.forEach((data, index) => {
         const previousClose = data.previousData?.close; // 전날 종가
@@ -185,14 +211,18 @@ export class AppController {
           console.log(`전날 종가: ${previousClose}`);
           console.log(`당일 종가: ${currentClose}`);
           console.log(`변동률: ${changePercent.toFixed(2)}%\n`);
+          rateOfChangeVal = Number(changePercent.toFixed(2));
+          rateOfChangeArr.push(rateOfChangeVal / 100);
         } else {
           console.log(
             `${indices[index]} (${symbols[index]})에 대한 충분한 데이터가 없습니다.\n`,
           );
         }
       });
+      return rateOfChangeArr;
     } catch (error) {
       console.error('데이터를 가져오는 중 오류 발생:', error);
+      return [];
     }
   }
 }
