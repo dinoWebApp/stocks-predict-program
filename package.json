@@ -23,10 +23,12 @@
     "@nestjs/common": "^10.0.0",
     "@nestjs/core": "^10.0.0",
     "@nestjs/platform-express": "^10.0.0",
+    "@prisma/client": "^5.19.1",
     "@tensorflow/tfjs": "^4.21.0",
     "@tensorflow/tfjs-node": "^4.21.0",
     "express-handlebars": "^8.0.1",
     "luxon": "^3.5.0",
+    "prisma": "^5.19.1",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.1",
     "yahoo-finance2": "^2.11.3"
