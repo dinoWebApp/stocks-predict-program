@@ -26,6 +26,8 @@
     "@prisma/client": "^5.19.1",
     "@tensorflow/tfjs": "^4.21.0",
     "@tensorflow/tfjs-node": "^4.21.0",
+    "axios": "^1.7.7",
+    "cheerio": "^1.0.0",
     "express-handlebars": "^8.0.1",
     "luxon": "^3.5.0",
     "prisma": "^5.19.1",
