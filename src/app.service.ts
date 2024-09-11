@@ -2,106 +2,163 @@ import { Injectable } from '@nestjs/common';
 import { DateTime } from 'luxon';
 import { load } from 'cheerio'; // cheerio에서 load 함수만 가져옴
 import axios from 'axios';
+import { ConfigService } from '@nestjs/config';
+
+enum Country {
+  korea = 'ko',
+  us = 'us',
+}
 
 @Injectable()
 export class AppService {
+  constructor(private readonly configService: ConfigService) {}
   async getStockData() {
-    let result = [];
-    const yesterday = DateTime.now()
-      .setZone('Asia/Seoul')
-      .minus({ days: 1 })
-      .setLocale('en');
-
-    const formattedDate = yesterday.toLocaleString({
-      month: 'short',
-      day: '2-digit',
-      year: 'numeric',
-    });
+    return this.getStockDataFromUrl(Country.us);
+  }
+  async getKoreanStockData() {
+    return this.getStockDataFromUrl(Country.korea);
   }
 
-  async getKoreanStockData(date: string) {
-    const symbols = ['^KS11', '^KQ11']; // 코스피, 코스닥 심볼
-    const indices = ['KOSPI', 'KOSDAQ'];
+  async getStockDataFromUrl(country: Country) {
+    const stockUrl: string = this.configService.get<string>('STOCK_URL');
+    let result: number[] = [];
+    if (country === Country.korea) {
+      let isHoliday = false;
+      const stockSymbols: string[] = [
+        this.configService.get('FIRST_DOMESTIC_STOCK_SYMBOL'),
+        this.configService.get('SECOND_DOMESTIC_STOCK_SYMBOL'),
+      ];
+      const yesterday = DateTime.now()
+        .setZone('Asia/Seoul')
+        .minus({ days: 1 })
+        .setLocale('en');
 
-    // date를 Date 객체로 변환
-    const currentDate = new Date(date);
-    const nextDate = new Date(currentDate);
-    nextDate.setDate(currentDate.getDate() + 1);
-
-    // 지정된 날짜 이전으로부터 데이터를 찾는 재귀 함수
-    const fetchPreviousData = async (
-      symbol: string,
-      currentDate: Date,
-      attempt: number = 1,
-    ) => {
-      if (attempt > 5) {
-        // 최대 5일 전까지의 데이터를 확인합니다.
-        throw new Error(`No sufficient data found for symbol ${symbol}`);
-      }
-
-      const previousDate = new Date(currentDate);
-      previousDate.setDate(currentDate.getDate() - attempt);
-
-      try {
-        const previousData = await yahooFinance.historical(symbol, {
-          period1: previousDate.toISOString().split('T')[0],
-          period2: currentDate.toISOString().split('T')[0],
-          interval: '1d',
-        });
-
-        if (previousData && previousData.length > 0) {
-          return previousData[0];
-        } else {
-          return await fetchPreviousData(symbol, currentDate, attempt + 1);
-        }
-      } catch (error) {
-        // 만약 에러가 발생하면 다음 날짜로 재귀 호출
-        return await fetchPreviousData(symbol, currentDate, attempt + 1);
-      }
-    };
-
-    try {
-      const marketDataPromises = symbols.map(async (symbol) => {
-        // 전날과 현재 날짜 데이터를 가져오기
-        const previousData = await fetchPreviousData(symbol, currentDate);
-
-        const currentData = await yahooFinance.historical(symbol, {
-          period1: currentDate.toISOString().split('T')[0],
-          period2: nextDate.toISOString().split('T')[0], // 당일
-          interval: '1d',
-        });
-
-        return { previousData, currentData };
+      const yesterdayDate = yesterday.toLocaleString({
+        month: 'short',
+        day: '2-digit',
+        year: 'numeric',
       });
+      for (const symbol of stockSymbols) {
+        const url = `${stockUrl}/${symbol}`;
+        if (isHoliday) return;
+        try {
+          let yesterdayChangeStr: string;
+          const response = await axios.get(url);
+          const $ = load(response.data); // load 함수를 사용해 데이터를 파싱
 
-      const marketData = await Promise.all(marketDataPromises);
-      let rateOfChangeArr = [];
-      let rateOfChangeVal: number;
+          $('table tbody tr').each((index, element) => {
+            const date = $(element).find('td:nth-child(1)').text().trim(); // 날짜
+            const change = $(element).find('td:nth-child(7)').text().trim(); // 종가
 
-      marketData.forEach((data, index) => {
-        const previousClose = data.previousData?.close; // 전날 종가
-        const currentClose = data.currentData[0]?.close; // 당일 종가
+            if (date === yesterdayDate) {
+              console.log(`${country} Date: ${date}, Change: ${change}`);
+              yesterdayChangeStr = change;
+            }
+          });
 
-        if (previousClose && currentClose) {
-          const changePercent =
-            ((currentClose - previousClose) / previousClose) * 100;
-
-          console.log(`${indices[index]} (${symbols[index]})`);
-          console.log(`전날 종가: ${previousClose}`);
-          console.log(`당일 종가: ${currentClose}`);
-          console.log(`변동률: ${changePercent.toFixed(2)}%\n`);
-          rateOfChangeVal = Number(changePercent.toFixed(2));
-          rateOfChangeArr.push(rateOfChangeVal / 100);
-        } else {
-          console.log(
-            `${indices[index]} (${symbols[index]})에 대한 충분한 데이터가 없습니다.\n`,
-          );
+          if (!yesterdayChangeStr) {
+            isHoliday = true;
+            return;
+          }
+          const yesterdayChange =
+            Number(yesterdayChangeStr.replace(/[%+]/g, '')) / 100;
+          result.push(yesterdayChange);
+          console.log(result);
+        } catch (error) {
+          console.log(error);
         }
-      });
-      return rateOfChangeArr;
-    } catch (error) {
-      console.error('데이터를 가져오는 중 오류 발생:', error);
-      return [];
+      }
+      console.log(result);
+      return result;
+    }
+
+    if (country === Country.us) {
+      const stockSymbols: string[] = [
+        this.configService.get('FIRST_STOCK_SYMBOL'),
+        this.configService.get('SECOND_STOCK_SYMBOL'),
+        this.configService.get('THIRD_STOCK_SYMBOL'),
+      ];
+      let selectedDate: string;
+      let minusDate = 1;
+      for (const symbol of stockSymbols) {
+        const url = `${stockUrl}/${symbol}`;
+        if (!selectedDate) {
+          while (!selectedDate) {
+            const previousDay = DateTime.now()
+              .setZone('Asia/Seoul')
+              .minus({ days: minusDate })
+              .setLocale('en');
+
+            const previousDate = previousDay.toLocaleString({
+              month: 'short',
+              day: '2-digit',
+              year: 'numeric',
+            });
+            try {
+              let previousChangeStr: string;
+              const response = await axios.get(url);
+              const $ = load(response.data); // load 함수를 사용해 데이터를 파싱
+
+              $('table tbody tr').each((index, element) => {
+                const date = $(element).find('td:nth-child(1)').text().trim(); // 날짜
+                const change = $(element).find('td:nth-child(7)').text().trim(); // 종가
+
+                if (date === previousDate) {
+                  console.log(`${country} Date: ${date}, Change: ${change}`);
+                  previousChangeStr = change;
+                }
+              });
+
+              if (previousChangeStr) {
+                selectedDate = previousDate;
+                const previousChange =
+                  Number(previousChangeStr.replace(/[%+]/g, '')) / 100;
+                result.push(previousChange);
+                break;
+              }
+              minusDate++;
+            } catch (error) {
+              console.log(error);
+            }
+          }
+          continue;
+        }
+        const previousDay = DateTime.now()
+          .setZone('Asia/Seoul')
+          .minus({ days: minusDate })
+          .setLocale('en');
+
+        const previousDate = previousDay.toLocaleString({
+          month: 'short',
+          day: '2-digit',
+          year: 'numeric',
+        });
+        try {
+          let previousChangeStr: string;
+          const response = await axios.get(url);
+          const $ = load(response.data); // load 함수를 사용해 데이터를 파싱
+
+          $('table tbody tr').each((index, element) => {
+            const date = $(element).find('td:nth-child(1)').text().trim(); // 날짜
+            const change = $(element).find('td:nth-child(7)').text().trim(); // 종가
+
+            if (date === previousDate) {
+              console.log(`Date: ${date}, Change: ${change}`);
+              previousChangeStr = change;
+            }
+          });
+
+          if (previousChangeStr) {
+            selectedDate = previousDate;
+            const previousChange =
+              Number(previousChangeStr.replace(/[%+]/g, '')) / 100;
+            result.push(previousChange);
+          }
+        } catch (error) {
+          console.log(error);
+        }
+      }
+      return result;
     }
   }
 }
